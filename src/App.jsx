@@ -7,15 +7,15 @@ import Navbar from './components/Navbar';
 const theme = createTheme({
   palette: {
     primary: {
-      main: '#3f51b5', // Indigo
-      light: '#757de8',
-      dark: '#002984',
+      main: '#8B7355', // Light brown
+      light: '#A68B6C',
+      dark: '#6F5B3E',
     },
     secondary: {
-      main: '#f50057', // Pink
+      main: '#D2B48C', // Tan
     },
     background: {
-      default: '#f5f7fb',
+      default: '#FAF9F6', // Off white
       paper: '#ffffff',
     },
     text: {

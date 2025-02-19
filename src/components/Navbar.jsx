@@ -29,7 +29,7 @@ const Navbar = () => {
             }}
             onClick={() => navigate('/')}
           >
-            Family Tree AI
+            Treely
           </Typography>
           <Box sx={{ display: 'flex', gap: 2 }}>
             <Button

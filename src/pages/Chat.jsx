@@ -16,14 +16,27 @@ import {
 import FamilyTreeChat from '../components/FamilyTreeChat';
 import { supabase } from '../lib/supabase';
 import WelcomeMessage from '../components/WelcomeMessage';
+import FamilyTreeVisualization from '../components/FamilyTreeVisualization';
 
 const Chat = () => {
   const { familyId } = useParams();
   const navigate = useNavigate();
   const [family, setFamily] = useState(null);
+  const [messages, setMessages] = useState([]);
 
   useEffect(() => {
     loadFamily();
+    // Add initial AI message if there are no messages
+    if (messages.length === 0) {
+      setMessages([
+        {
+          content:
+            "Hi! I'm here to help you build your family tree. Could you tell me who you are and how you're related to this family tree?",
+          role: 'assistant',
+          timestamp: new Date().toISOString(),
+        },
+      ]);
+    }
   }, [familyId]);
 
   const loadFamily = async () => {
@@ -58,7 +71,7 @@ const Chat = () => {
             p: 3,
             mb: 3,
             borderRadius: 3,
-            background: 'linear-gradient(135deg, #3f51b5 0%, #757de8 100%)',
+            background: 'linear-gradient(135deg, #8B7355 0%, #A68B6C 100%)',
             color: 'white',
           }}
         >
@@ -93,7 +106,17 @@ const Chat = () => {
           )}
         </Paper>
         {!messages.length && <WelcomeMessage />}
-        <FamilyTreeChat familyId={familyId} />
+        <FamilyTreeChat
+          familyId={familyId}
+          messages={messages}
+          setMessages={setMessages}
+        />
+        <Box sx={{ mt: 4 }}>
+          <Typography variant='h5' sx={{ mb: 2 }}>
+            Family Tree Visualization
+          </Typography>
+          <FamilyTreeVisualization familyId={familyId} />
+        </Box>
       </Container>
     </Box>
   );

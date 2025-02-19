@@ -38,13 +38,26 @@ const Home = () => {
 
   const loadFamilies = async () => {
     try {
+      // Get families with member counts
       const { data, error } = await supabase
         .from('families')
-        .select('*')
+        .select(
+          `
+          *,
+          family_members:family_members(count)
+        `
+        )
         .order('created_at', { ascending: false });
 
       if (error) throw error;
-      setFamilies(data || []);
+
+      // Transform the data to include member count
+      const familiesWithCounts = data.map((family) => ({
+        ...family,
+        member_count: family.family_members.length,
+      }));
+
+      setFamilies(familiesWithCounts);
     } catch (error) {
       console.error('Error loading families:', error);
     }
@@ -80,7 +93,7 @@ const Home = () => {
       <Box sx={{ mt: 10, mb: 4 }}>
         <Box sx={{ textAlign: 'center', mb: 6 }}>
           <Typography variant='h2' component='h1' gutterBottom>
-            Family Tree AI Assistant
+            Treely
           </Typography>
           <Typography variant='h5' color='text.secondary' sx={{ mb: 4 }}>
             Build your family tree through natural conversations

@@ -8,8 +8,7 @@ import { supabase } from '../lib/supabase';
 import LoadingBubble from './LoadingBubble';
 import AnimatedMessage from './AnimatedMessage';
 
-const FamilyTreeChat = ({ familyId }) => {
-  const [messages, setMessages] = useState([]);
+const FamilyTreeChat = ({ familyId, messages, setMessages }) => {
   const [input, setInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -82,24 +81,110 @@ const FamilyTreeChat = ({ familyId }) => {
     }
   };
 
+  const checkExistingMember = async (memberInfo) => {
+    const { data, error } = await supabase
+      .from('family_members')
+      .select('*')
+      .eq('family_id', familyId)
+      .ilike('name', memberInfo.name) // Case-insensitive name comparison
+      .eq('relation', memberInfo.relation);
+
+    if (error) {
+      console.error('Error checking existing member:', error);
+      return false;
+    }
+
+    return data.length > 0;
+  };
+
   const saveFamilyMember = async (memberInfo) => {
     try {
-      const { data, error } = await supabase
+      // First check if member already exists by name
+      const { data: existingMember } = await supabase
         .from('family_members')
-        .insert([
-          {
-            ...memberInfo,
-            family_id: familyId,
-          },
-        ])
-        .select();
+        .select('*')
+        .eq('family_id', familyId)
+        .ilike('name', memberInfo.name)
+        .single();
 
-      if (error) throw error;
-      return data[0];
+      let member = existingMember;
+
+      if (!existingMember) {
+        // Save new member if they don't exist
+        const { data: newMember, error: memberError } = await supabase
+          .from('family_members')
+          .insert([
+            {
+              family_id: familyId,
+              name: memberInfo.name,
+              birth_date: memberInfo.birth_date || null,
+              occupation: memberInfo.occupation || null,
+            },
+          ])
+          .select()
+          .single();
+
+        if (memberError) throw memberError;
+        member = newMember;
+      }
+
+      // Handle relationships
+      if (memberInfo.relationships && memberInfo.relationships.length > 0) {
+        for (const rel of memberInfo.relationships) {
+          // Find the related member
+          const { data: relatedMember } = await supabase
+            .from('family_members')
+            .select('id')
+            .eq('family_id', familyId)
+            .ilike('name', rel.to_name)
+            .single();
+
+          if (relatedMember) {
+            // Create bidirectional relationships
+            await supabase.from('relationships').upsert([
+              {
+                family_id: familyId,
+                person1_id: member.id,
+                person2_id: relatedMember.id,
+                relationship_type: rel.type,
+              },
+              {
+                family_id: familyId,
+                person1_id: relatedMember.id,
+                person2_id: member.id,
+                relationship_type: getInverseRelation(rel.type),
+              },
+            ]);
+          }
+        }
+      }
+
+      return member;
     } catch (error) {
       console.error('Error saving family member:', error);
       throw error;
     }
+  };
+
+  // Helper function to get inverse relationship
+  const getInverseRelation = (relationType) => {
+    const inverseMap = {
+      parent: 'child',
+      child: 'parent',
+      sibling: 'sibling',
+      spouse: 'spouse',
+    };
+    return inverseMap[relationType] || relationType;
+  };
+
+  const getMemberCount = async () => {
+    const { count, error } = await supabase
+      .from('family_members')
+      .select('*', { count: 'exact' })
+      .eq('family_id', familyId);
+
+    if (error) throw error;
+    return count;
   };
 
   const saveRelationship = async (relationship) => {
@@ -115,22 +200,55 @@ const FamilyTreeChat = ({ familyId }) => {
     }
   };
 
+  // Add this function to check for family connections
+  const findFamilyConnection = (name) => {
+    // Case-insensitive name comparison
+    name = name.toLowerCase().trim();
+
+    // Check direct matches
+    const directMatch = familyMembers.find(
+      (m) =>
+        m.name.toLowerCase().includes(name) ||
+        name.includes(m.name.toLowerCase())
+    );
+
+    // Check relations in member info
+    const relationMatch = familyMembers.find(
+      (m) =>
+        m.relation.toLowerCase().includes(name) ||
+        (m.relation.toLowerCase().includes('to') &&
+          m.relation.toLowerCase().split('to')[1].trim().includes(name))
+    );
+
+    return directMatch || relationMatch;
+  };
+
+  // Update the identifyUser function
   const identifyUser = async (message) => {
     const jsonMatch = message.match(/<json>([\s\S]*?)<\/json>/);
     if (jsonMatch) {
       try {
         const data = JSON.parse(jsonMatch[1]);
         if (data.action === 'identify_user') {
-          // Save user to database
-          const { error } = await supabase
-            .from('families')
-            .update({ current_user: data.user })
-            .eq('id', familyId);
+          const user = data.user;
 
-          if (error) throw error;
+          // Check if this person is already connected to the family
+          const connection = findFamilyConnection(user.name);
+          if (connection) {
+            // Save user to database
+            const { error } = await supabase
+              .from('families')
+              .update({ current_user: user })
+              .eq('id', familyId);
 
-          setCurrentUser(data.user);
-          return true;
+            if (error) throw error;
+
+            setCurrentUser(user);
+            return true;
+          } else {
+            console.log('No family connection found for:', user.name);
+            return false;
+          }
         }
       } catch (error) {
         console.error('Error processing user identification:', error);
@@ -139,36 +257,71 @@ const FamilyTreeChat = ({ familyId }) => {
     return false;
   };
 
+  // Update the system prompt to be more specific about relationships
   const getSystemPrompt = () => {
     if (!currentUser) {
-      return `Ask for user's name and relation to this family tree. Extract as:
-<json>{"action":"identify_user","user":{"name":"name","relation":"relation"}}</json>`;
+      const existingMembers = familyMembers
+        .map((m) => `- ${m.name}`)
+        .join('\n');
+
+      return `You are helping build a family tree. When someone introduces themselves, ask about their relationship to existing members.
+
+Existing members:
+${existingMembers}
+
+When they identify themselves, include their info as:
+<json>{"action":"identify_user","user":{"name":"exact_full_name"}}</json>`;
     }
 
-    // For returning users, only include immediate family members
-    const relevantMembers = familyMembers
-      .filter((m) =>
-        [
-          'father',
-          'mother',
-          'brother',
-          'sister',
-          'spouse',
-          'son',
-          'daughter',
-        ].includes(m.relation.toLowerCase())
-      )
-      .map((m) => `${m.name} (${m.relation})`)
+    // Get existing relationships for context
+    const relationships = familyMembers
+      .map((member) => {
+        const relations = member.relationships
+          ?.map((r) => {
+            const relatedMember = familyMembers.find(
+              (m) => m.id === r.person2_id
+            );
+            return relatedMember
+              ? `${relatedMember.name} (${r.relationship_type})`
+              : null;
+          })
+          .filter(Boolean);
+        return `${member.name} is connected to: ${relations?.join(', ')}`;
+      })
       .join('\n');
 
-    return `You're helping ${currentUser.name} (${
-      currentUser.relation
-    }) build their family tree.
-${relevantMembers ? `\nImmediate family:\n${relevantMembers}` : ''}
-Extract new family info as:
-<json>{"action":"add_member","member":{"name":"","birth_date":"YYYY-MM-DD","relation":"to ${
-      currentUser.name
-    }","occupation":""}}</json>`;
+    return `You are helping ${currentUser.name} build their family tree.
+
+Current family structure:
+${relationships}
+
+When adding a new member:
+1. First confirm if they're already in the tree
+2. Ask specific questions about their relationships to existing members
+3. Get complete information before adding
+
+When adding a new member, include their info as:
+<json>{
+  "action": "add_member",
+  "member": {
+    "name": "full_name",
+    "birth_date": "YYYY-MM-DD",
+    "occupation": "occupation",
+    "relationships": [
+      {
+        "to_name": "exact_name_of_existing_member",
+        "type": "parent|child|sibling|spouse"
+      }
+    ]
+  }
+}</json>
+
+Important:
+- Always verify exact names with user
+- Create all relevant family connections
+- Ask follow-up questions about relationships
+- Keep conversation natural
+- Never show JSON in messages`;
   };
 
   const handleSend = async () => {
@@ -251,10 +404,9 @@ Extract new family info as:
           const jsonMatch = aiMessage.match(/<json>([\s\S]*?)<\/json>/);
           if (jsonMatch) {
             const familyData = JSON.parse(jsonMatch[1]);
-            if (familyData.member) {
-              const savedMember = await saveFamilyMember(familyData.member);
-              console.log('Saved family member:', savedMember);
-              await loadFamilyData();
+            if (familyData.action === 'add_member' && familyData.member) {
+              await saveFamilyMember(familyData.member);
+              await loadFamilyData(); // Reload the family data to update the context
             }
           }
         } catch (error) {
@@ -364,7 +516,7 @@ Extract new family info as:
               '& .MuiOutlinedInput-root': {
                 bgcolor: 'background.paper',
                 '&.Mui-focused': {
-                  boxShadow: '0 0 0 2px rgba(63, 81, 181, 0.2)',
+                  boxShadow: '0 0 0 2px rgba(139, 115, 85, 0.2)',
                 },
               },
             }}

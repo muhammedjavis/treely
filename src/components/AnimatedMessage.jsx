@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { Paper, Typography } from '@mui/material';
+import PropTypes from 'prop-types';
 
 const AnimatedMessage = ({ message, isUser }) => {
   return (
@@ -17,7 +18,7 @@ const AnimatedMessage = ({ message, isUser }) => {
           color: isUser ? 'white' : 'text.primary',
           borderRadius: isUser ? '20px 20px 5px 20px' : '20px 20px 20px 5px',
           boxShadow: isUser
-            ? '0 4px 6px -1px rgba(63, 81, 181, 0.2)'
+            ? '0 4px 6px -1px rgba(139, 115, 85, 0.2)'
             : '0 4px 6px -1px rgba(0, 0, 0, 0.05)',
         }}
       >
@@ -38,6 +39,14 @@ const AnimatedMessage = ({ message, isUser }) => {
       </Paper>
     </motion.div>
   );
+};
+
+AnimatedMessage.propTypes = {
+  message: PropTypes.shape({
+    content: PropTypes.string.isRequired,
+    timestamp: PropTypes.string.isRequired,
+  }).isRequired,
+  isUser: PropTypes.bool.isRequired,
 };
 
 export default AnimatedMessage;
