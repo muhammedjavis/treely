@@ -274,31 +274,41 @@ When they identify themselves, include their info as:
     }
 
     // Get existing relationships for context
-    const relationships = familyMembers
+    const familyContext = familyMembers
       .map((member) => {
         const relations = member.relationships
           ?.map((r) => {
             const relatedMember = familyMembers.find(
               (m) => m.id === r.person2_id
             );
-            return relatedMember
-              ? `${relatedMember.name} (${r.relationship_type})`
-              : null;
+            if (!relatedMember) return null;
+            return `${relatedMember.name} (${r.relationship_type})`;
           })
           .filter(Boolean);
-        return `${member.name} is connected to: ${relations?.join(', ')}`;
+
+        return `${member.name} - Related to: ${
+          relations?.join(', ') || 'no relations yet'
+        }`;
       })
       .join('\n');
 
     return `You are helping ${currentUser.name} build their family tree.
 
 Current family structure:
-${relationships}
+${familyContext}
 
 When adding a new member:
 1. First confirm if they're already in the tree
 2. Ask specific questions about their relationships to existing members
 3. Get complete information before adding
+
+Valid relationship types are:
+- parent/child (for direct parent-child relationships)
+- spouse (for married couples)
+- sibling (for brothers and sisters)
+- grandparent/grandchild
+- aunt/uncle and niece/nephew
+- cousin
 
 When adding a new member, include their info as:
 <json>{
@@ -310,7 +320,7 @@ When adding a new member, include their info as:
     "relationships": [
       {
         "to_name": "exact_name_of_existing_member",
-        "type": "parent|child|sibling|spouse"
+        "type": "one_of_valid_relationship_types"
       }
     ]
   }

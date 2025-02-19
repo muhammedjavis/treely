@@ -38,24 +38,27 @@ const Home = () => {
 
   const loadFamilies = async () => {
     try {
-      // Get families with member counts
-      const { data, error } = await supabase
+      // Get families with their member counts
+      const { data: families, error: familiesError } = await supabase
         .from('families')
-        .select(
-          `
-          *,
-          family_members:family_members(count)
-        `
-        )
-        .order('created_at', { ascending: false });
+        .select('*, family_members(count)');
 
-      if (error) throw error;
+      if (familiesError) throw familiesError;
 
-      // Transform the data to include member count
-      const familiesWithCounts = data.map((family) => ({
-        ...family,
-        member_count: family.family_members.length,
-      }));
+      // Get actual count for each family
+      const familiesWithCounts = await Promise.all(
+        families.map(async (family) => {
+          const { count } = await supabase
+            .from('family_members')
+            .select('*', { count: 'exact', head: true })
+            .eq('family_id', family.id);
+
+          return {
+            ...family,
+            member_count: count || 0,
+          };
+        })
+      );
 
       setFamilies(familiesWithCounts);
     } catch (error) {
