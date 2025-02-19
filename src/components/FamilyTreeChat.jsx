@@ -355,6 +355,9 @@ Important:
 
       const apiKey = import.meta.env.VITE_OPENAI_API_KEY;
 
+      // Debug log - remove in production
+      console.log('API Key exists:', !!apiKey);
+
       const response = await fetch(
         'https://api.openai.com/v1/chat/completions',
         {
@@ -377,19 +380,25 @@ Important:
               },
             ],
             temperature: 0.7,
-            max_tokens: 300, // Limit response length
+            max_tokens: 300,
           }),
         }
       );
 
-      const data = await response.json();
-      console.log('OpenAI Response:', data);
-
       if (!response.ok) {
+        const errorData = await response.json();
+        console.error('OpenAI API Error:', {
+          status: response.status,
+          statusText: response.statusText,
+          error: errorData,
+        });
         throw new Error(
-          `API Error: ${data.error?.message || response.statusText}`
+          `API Error: ${errorData.error?.message || response.statusText}`
         );
       }
+
+      const data = await response.json();
+      console.log('OpenAI Response:', data);
 
       const aiMessage = data.choices[0].message.content;
 
@@ -460,6 +469,11 @@ Important:
         borderColor: 'divider',
       }}
     >
+      {error && (
+        <Box sx={{ p: 2, bgcolor: 'error.light', color: 'error.contrastText' }}>
+          <Typography>Error: {error}</Typography>
+        </Box>
+      )}
       <Box
         sx={{
           flexGrow: 1,
