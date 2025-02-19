@@ -31,7 +31,7 @@ const Chat = () => {
       setMessages([
         {
           content:
-            "Hi! I'm here to help you build your family tree. Could you tell me who you are and how you're related to this family tree?",
+            "Hi! I'm here to help you build your family tree. Could you tell me who you are?",
           role: 'assistant',
           timestamp: new Date().toISOString(),
         },
